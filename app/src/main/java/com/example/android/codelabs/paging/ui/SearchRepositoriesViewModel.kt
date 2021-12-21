@@ -21,8 +21,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.paging.PagingData
 import androidx.paging.cachedIn
+import androidx.paging.insertSeparators
+import androidx.paging.map
 import com.example.android.codelabs.paging.data.GithubRepository
-import com.example.android.codelabs.paging.model.Repo
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -51,7 +52,10 @@ class SearchRepositoriesViewModel(
      */
     val state: StateFlow<UiState>
 
-    val pagingDataFlow: Flow<PagingData<Repo>>
+    val pagingDataFlow: Flow<PagingData<UiModel>>
+
+    private val UiModel.RepoItem.roundedStarCount: Int
+        get() = this.repo.stars / 10_000
 
     /**
      * Processor of side effects from the UI which in turn feedback into [state]
@@ -104,8 +108,26 @@ class SearchRepositoriesViewModel(
         super.onCleared()
     }
 
-    private fun searchRepo(queryString: String): Flow<PagingData<Repo>> =
-        repository.getSearchResultStream(queryString)
+    private fun searchRepo(queryString: String): Flow<PagingData<UiModel>> = repository
+        .getSearchResultStream(queryString)
+        .map { pagingData -> pagingData.map { UiModel.RepoItem(it) } }
+        .map {
+            it.insertSeparators { before, after ->
+                if (after == null) return@insertSeparators null
+                if (before == null) {
+                    return@insertSeparators UiModel.SeparatorItem("${after.roundedStarCount}0.000+ stars")
+                }
+                if (before.roundedStarCount > after.roundedStarCount) {
+                    if (after.roundedStarCount >= 1) {
+                        UiModel.SeparatorItem("${after.roundedStarCount}0.000+ stars")
+                    } else {
+                        UiModel.SeparatorItem("< 10.000+ stars")
+                    }
+                } else {
+                    null
+                }
+            }
+        }
 }
 
 sealed class UiAction {
